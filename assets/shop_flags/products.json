@@ -1,0 +1,126 @@
+{
+  "anchor": {
+    "prod": 3728684166,
+    "staging": 0
+  },
+  "astronaut": {
+    "prod": 3728684195,
+    "staging": 0
+  },
+  "bat_moon": {
+    "prod": 3728684081,
+    "staging": 0
+  },
+  "big_red_button": {
+    "prod": 3728684149,
+    "staging": 0
+  },
+  "capybara": {
+    "prod": 3728684235,
+    "staging": 0
+  },
+  "cat": {
+    "prod": 3728684230,
+    "staging": 0
+  },
+  "cauldron": {
+    "prod": 3728684095,
+    "staging": 0
+  },
+  "comet": {
+    "prod": 3728684221,
+    "staging": 0
+  },
+  "dragon_dynasty": {
+    "prod": 3728684123,
+    "staging": 0
+  },
+  "frost_crown": {
+    "prod": 3728684273,
+    "staging": 0
+  },
+  "grinning_skull": {
+    "prod": 3728684088,
+    "staging": 0
+  },
+  "jolly_roger": {
+    "prod": 3728684173,
+    "staging": 0
+  },
+  "kraken": {
+    "prod": 3728684160,
+    "staging": 0
+  },
+  "lighthouse": {
+    "prod": 3728684186,
+    "staging": 0
+  },
+  "lion_crest": {
+    "prod": 3728684111,
+    "staging": 0
+  },
+  "mirv_storm": {
+    "prod": 3728684142,
+    "staging": 0
+  },
+  "phantom": {
+    "prod": 3728684100,
+    "staging": 0
+  },
+  "phoenix": {
+    "prod": 3728684126,
+    "staging": 0
+  },
+  "pizza": {
+    "prod": 3728684249,
+    "staging": 0
+  },
+  "pumpkin_king": {
+    "prod": 3728684076,
+    "staging": 0
+  },
+  "radioactive": {
+    "prod": 3728684132,
+    "staging": 0
+  },
+  "ringed_planet": {
+    "prod": 3728684215,
+    "staging": 0
+  },
+  "rocket": {
+    "prod": 3728684205,
+    "staging": 0
+  },
+  "rubber_duck": {
+    "prod": 3728684241,
+    "staging": 0
+  },
+  "set:halloween": {
+    "prod": 0,
+    "staging": 0
+  },
+  "spider_web": {
+    "prod": 3728684105,
+    "staging": 0
+  },
+  "thunder": {
+    "prod": 3728684267,
+    "staging": 0
+  },
+  "tornado": {
+    "prod": 3728684284,
+    "staging": 0
+  },
+  "volcano": {
+    "prod": 3728684259,
+    "staging": 0
+  },
+  "warhead": {
+    "prod": 3728684135,
+    "staging": 0
+  },
+  "wolf_pack": {
+    "prod": 3728684118,
+    "staging": 0
+  }
+}
