@@ -25,6 +25,9 @@ local IS_ROBLOX = typeof(game) == "Instance"
 local Stars: any = if IS_ROBLOX
 	then require((game :: any):GetService("ReplicatedStorage"):WaitForChild("Airfront").Data.Stars)
 	else require("../shared/Data/Stars")
+local BattlePass: any = if IS_ROBLOX
+	then require((game :: any):GetService("ReplicatedStorage"):WaitForChild("Airfront").Data.BattlePass)
+	else require("../shared/Data/BattlePass")
 local Subscription: any = if IS_ROBLOX
 	then require((game :: any):GetService("ReplicatedStorage"):WaitForChild("Airfront").Data.Subscription)
 	else require("../shared/Data/Subscription")
@@ -82,6 +85,14 @@ local function with_double(player: any, lines: { { any } }, total: number): ({ {
 	if total > 0 and deps.double and deps.double(player) == true then
 		table.insert(lines, { "double", total })
 		total *= 2
+	end
+	-- the Space Pass's premium: +BOOST of the match's own Stars (Data/BattlePass; 2026-11-06)
+	if base > 0 and deps.pass_premium and deps.pass_premium(player) == true then
+		local extra = math.floor(base * (BattlePass.BOOST or 0) / Stars.QUANTUM + 0.5) * Stars.QUANTUM
+		if extra > 0 then
+			table.insert(lines, { "pass", extra })
+			total += extra
+		end
 	end
 	if base > 0 and deps.general and deps.general(player) == true then
 		local extra = Subscription.bonus(base, Stars.QUANTUM)

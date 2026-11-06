@@ -262,6 +262,8 @@ function Session.new(env: { [string]: any }?)
 	self.level_gained = Signal.new()
 	--- ({ text, from }) an admin's announcement (server/ServerMain "/announce")
 	self.announcement = Signal.new()
+	--- ({ kind, result, name }) a social reward's answer (group crate, a friend's invite)
+	self.social = Signal.new()
 	--- (going: boolean) the answer to hop_solo: true = a teleport to a fresh server is on its way
 	self.hop_result = Signal.new()
 	--- (key) an Arsenal item was just unlocked (Stars or Robux)
@@ -505,7 +507,10 @@ function Session._apply_own_cosmetics(self: any, id: number)
 	local eq = self.inventory.equipped or {}
 	-- (and their own head shot beside their name, as in a public match)
 	local uid = if type(self.env.user_id) == "function" then self.env.user_id() else 0
-	st:set_cosmetics({ [id] = { skin = eq.skin, flag = eq.flag, face = uid, ship = eq.ship } }, true)
+	st:set_cosmetics(
+		{ [id] = { skin = eq.skin, flag = eq.flag, face = uid, ship = eq.ship, fx = eq.fx, plate = eq.plate } },
+		true
+	)
 end
 
 --- Does the player have Arsenal item `key`?
@@ -521,6 +526,16 @@ function Session.bp_claim(self: any, tier: number, track: string): boolean
 		return false
 	end
 	net.send(OP.BP_CLAIM, tier, track)
+	return true
+end
+
+--- Claim the group crate (after joining the group; the answer comes as `social`).
+function Session.claim_group(self: any): boolean
+	local net = self.env.net
+	if net == nil or not net.connected or type(net.send) ~= "function" then
+		return false
+	end
+	net.send(OP.GROUP_CLAIM)
 	return true
 end
 
@@ -1496,8 +1511,11 @@ function Session._on_net(self: any, op: number, ...: any)
 					skin = if type(eq.skin) == "string" then eq.skin else nil,
 					flag = if type(eq.flag) == "string" then eq.flag else nil,
 					ship = if type(eq.ship) == "string" then eq.ship else nil, -- (Galaxy Takeover fleet skin)
+					fx = if type(eq.fx) == "string" then eq.fx else nil, -- (weapon effect, Data/Galactic)
+					plate = if type(eq.plate) == "string" then eq.plate else nil, -- (title)
 				},
 				crates_bought = tonumber(inv.crates_bought) or 0,
+				crates_opened = tonumber(inv.crates_opened) or 0,
 				crates_allowed = inv.crates_allowed == true,
 				stars = math.max(0, math.floor(tonumber(inv.stars) or 0)),
 				unlocks = {},
@@ -1507,6 +1525,7 @@ function Session._on_net(self: any, op: number, ...: any)
 				bp = if type(inv.bp) == "table" then inv.bp else nil,
 				-- level and stats (server/Purchases.level_state; Data/Levels)
 				lvl = if type(inv.lvl) == "table" then inv.lvl else nil,
+				social = if type(inv.social) == "table" then inv.social else nil,
 			}
 			local was = self._unlocks_seen
 			local fresh = {}
@@ -1573,6 +1592,11 @@ function Session._on_net(self: any, op: number, ...: any)
 		local data = ...
 		if type(data) == "table" and type(data.boards) == "table" then
 			self:_emit("leaderboard", data)
+		end
+	elseif op == OP.SOCIAL then
+		local d = ...
+		if type(d) == "table" and type(d.kind) == "string" then
+			self:_emit("social", d)
 		end
 	elseif op == OP.ANNOUNCE then
 		local d = ...

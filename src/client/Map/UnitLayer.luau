@@ -44,6 +44,7 @@ local EmbeddedImage = require(script.Parent.Parent:WaitForChild("UI"):WaitForChi
 local WakeRoute = require(script.Parent:WaitForChild("WakeRoute")) :: any
 local TrailBudget = require(script.Parent:WaitForChild("TrailBudget")) :: any
 local FrameClock = require(script.Parent:WaitForChild("FrameClock")) :: any
+local FxColors = require(script.Parent:WaitForChild("FxColors")) :: any
 
 --- The one-image sprites (Sprites.units_one) are used once the atlas is known to have loaded: an image
 --- still in moderation would leave every unit invisible.
@@ -620,7 +621,9 @@ function UnitLayer.tick(self: any, _dt: number)
 			end
 			continue
 		end
-		local c = st:owner_color(n.owner)
+		-- (an owner's weapon effect colours the trail, its second colour near the head: Data/Galactic)
+		local fxc, fxc2 = FxColors.of(st, n.owner)
+		local c = fxc or st:owner_color(n.owner)
 		-- trail: the curve flown so far, a line through points every TRAIL_STEP full-size tiles, up to
 		-- the munition (it was a dot at each point, spaced wider than a dot: a broken line that looked
 		-- glitchy; solid since 2026-10-12)
@@ -642,7 +645,7 @@ function UnitLayer.tick(self: any, _dt: number)
 				tx, ty = cam:map_to_screen(UnitLayer.nuke_uv(st, n, i / steps))
 			end
 			if px0 ~= nil and (cam:on_screen(tx, ty, thick) or cam:on_screen(px0, py0, thick)) then
-				self:_bar(px0, py0, tx, ty, thick, c)
+				self:_bar(px0, py0, tx, ty, thick, if fxc2 ~= nil and i >= newest - 1 then fxc2 else c)
 			end
 			px0, py0 = tx, ty
 		end

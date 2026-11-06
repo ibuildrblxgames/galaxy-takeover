@@ -118,14 +118,14 @@ function ShopButton._build(self)
 	new("UIStroke", { Color = WHITE, Thickness = 2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, self._flag)
 	self._flag_scale = new("UIScale", {}, self._flag)
 	text(card, {
-		Text = "FLAG SHOP",
+		Text = "GALACTIC SHOP",
 		TextSize = 17,
 		Position = UDim2.fromOffset(84, 8),
 		Size = UDim2.fromOffset(144, 20),
 		ZIndex = 5,
 	})
 	self._what = text(card, {
-		Text = "NEW FLAGS DAILY",
+		Text = "NEW ITEMS DAILY",
 		TextSize = 12,
 		TextColor3 = LILAC,
 		Position = UDim2.fromOffset(84, 30),
@@ -227,7 +227,7 @@ function ShopButton.refresh(self)
 		table.insert(keys, k)
 	end
 	self._keys = keys
-	self._what.Text = if #c.sets > 0 then string.upper(c.sets[1].name) .. " FLAGS" else "NEW FLAGS DAILY"
+	self._what.Text = if #c.sets > 0 then string.upper(c.sets[1].name) .. " FLAGS" else "NEW ITEMS DAILY"
 	self._what.TextColor3 = if #c.sets > 0 then PUMPKIN else LILAC
 	self._sticker.Visible = self.ctx:setting("shop_seen_day", -1) ~= c.day
 	self:_show_flag()

@@ -419,6 +419,9 @@ local function on_screen_changed(screen: string)
 	if Main.stats_ui ~= nil then
 		pcall(Main.stats_ui.set_screen, Main.stats_ui, screen)
 	end
+	if Main.social ~= nil then
+		pcall(Main.social.set_screen, Main.social, screen)
+	end
 	if Main.space_pass ~= nil then
 		pcall(Main.space_pass.set_screen, Main.space_pass, screen)
 	end
@@ -581,6 +584,16 @@ function Main.start()
 			warn("[GalaxyTakeover] Announce failed: " .. tostring(an))
 		end
 	end
+	-- social rewards on the title: the group crate, friend invites (UI/Social)
+	local Social = optional(client, { "UI", "Social" })
+	if Social ~= nil then
+		local ok_so, so = pcall(Social.new, session, audio)
+		if ok_so then
+			Main.social = so
+		else
+			warn("[GalaxyTakeover] Social failed: " .. tostring(so))
+		end
+	end
 	-- levels and the lobby's leaderboard (Data/Levels; UI/StatsUI)
 	local StatsUI = optional(client, { "UI", "StatsUI" })
 	if StatsUI ~= nil then
@@ -595,6 +608,40 @@ function Main.start()
 	if ui ~= nil and ui.screen_changed ~= nil then
 		ui.screen_changed:Connect(on_screen_changed)
 	end
+	-- the title's side widgets (Space Pass, level, leaderboard, invites) live in ScreenGuis above
+	-- UIRoot's: while one of its windows is open, or the Space Pass / leaderboard window, they step aside
+	-- (2026-11-06: they showed over the Locker, the shop and the crate opening)
+	local MODALS = { "locker", "flag_shop", "crate_opening", "arsenal", "starter", "general", "map_picker", "help", "pause" }
+	local covered_was: { [string]: boolean } = {}
+	local function cover(w: any, name: string, on: boolean)
+		if w ~= nil and type(w.set_covered) == "function" and covered_was[name] ~= on then
+			covered_was[name] = on
+			pcall(w.set_covered, w, on)
+		end
+	end
+	local cover_t = 0.0
+	game:GetService("RunService").Heartbeat:Connect(function(dt)
+		cover_t += dt
+		if cover_t < 0.15 then
+			return
+		end
+		cover_t = 0
+		local by_ui = false
+		if Main.ui ~= nil then
+			for _, k in MODALS do
+				local m = (Main.ui :: any)[k]
+				if type(m) == "table" and m.is_open == true then
+					by_ui = true
+					break
+				end
+			end
+		end
+		local pass_open = Main.space_pass ~= nil and Main.space_pass.open_ == true
+		local stats_open = Main.stats_ui ~= nil and Main.stats_ui.open_ == true
+		cover(Main.space_pass, "pass", by_ui)
+		cover(Main.stats_ui, "stats", by_ui or pass_open)
+		cover(Main.social, "social", by_ui or pass_open or stats_open)
+	end)
 	-- sent here from an outdated server while starting a solo match (server/FreshServers): it starts here
 	pcall(function()
 		local data = game:GetService("TeleportService"):GetLocalPlayerTeleportData()

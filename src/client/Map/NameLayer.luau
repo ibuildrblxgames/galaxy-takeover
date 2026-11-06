@@ -25,6 +25,7 @@ local Cosmetics = require(RS:WaitForChild("Airfront"):WaitForChild("Data"):WaitF
 local Coop = require(RS:WaitForChild("Airfront"):WaitForChild("Net"):WaitForChild("Coop")) :: any
 local FrameClock = require(script.Parent:WaitForChild("FrameClock")) :: any
 local EmbeddedImage = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("EmbeddedImage")) :: any
+local Galactic = require(RS:WaitForChild("Airfront"):WaitForChild("Data"):WaitForChild("Galactic")) :: any
 
 local readi32 = buffer.readi32
 local readu8 = buffer.readu8
@@ -56,6 +57,11 @@ NameLayer.BUDGET_S = 0.0015
 NameLayer.FILL_CHECK = 2048
 --- Text line height / TextSize for Rubik.
 NameLayer.LINE_K = 1.0
+--- An owner's title (Data/Galactic, kind "plate"; 2026-11-06): its text size per name px, the
+--- smallest it shows at (screen px), and its glow's width per text px.
+NameLayer.TITLE_K = 0.6
+NameLayer.TITLE_MIN_PX = 6.0
+NameLayer.TITLE_GLOW_K = 0.2
 --- The local player's name line is at most this share of the view's height (OWN_MAX_MIN_PX at least);
 --- its head, flag, troops and crown follow it. Every other name is sized by its land, and a
 --- player holding a big share of the map had a name, a head and a flag across their own front (far
@@ -145,6 +151,9 @@ function NameLayer.unbind(self: any)
 	self._state = nil
 	for _, p in self._plates do
 		p.frame:Destroy()
+		if p.title ~= nil then
+			p.title:Destroy()
+		end
 	end
 	table.clear(self._plates)
 	table.clear(self._targets)
@@ -519,6 +528,29 @@ function NameLayer._plate(self: any, id: number): Plate
 	return p
 end
 
+--- Plate `p`'s title label (made the first time), showing title item `it`: its text in a gradient
+--- (color, top → color2) with a glow (an outline in `glow`). It lives beside the plate, not in it, so
+--- the name stays where it was; it hangs above the plate's top.
+function NameLayer._title(self: any, p: any, it: any)
+	if p.title == nil then
+		local l, st = new_text(self.root, "Title", 20)
+		l.AnchorPoint = Vector2.new(0.5, 1)
+		l.TextColor3 = Color3.new(1, 1, 1)
+		l.FontFace = Font.fromId(12187365977, Enum.FontWeight.Heavy)
+		l.Visible = false
+		st.Transparency = 0.15
+		local g = Instance.new("UIGradient")
+		g.Rotation = 90
+		g.Parent = l
+		local sc = Instance.new("UIScale")
+		sc.Parent = l
+		p.title, p.title_stroke, p.title_grad, p.title_scale = l, st, g, sc
+	end
+	p.title.Text = it.text or string.upper(it.name or "")
+	p.title_grad.Color = ColorSequence.new(Galactic.color3(it.color or 0xFFFFFF), Galactic.color3(it.color2 or it.color or 0xFFFFFF))
+	p.title_stroke.Color = Galactic.color3(it.glow or 0)
+end
+
 local function shade_of(kind: number): number
 	if kind == Defs.KIND_NATION then
 		return NameLayer.SHADE_NATION
@@ -602,6 +634,9 @@ function NameLayer.tick(self: any, dt: number)
 				p.frame.Visible = false
 				p.shown = false
 			end
+			if p.title ~= nil and p.title.Visible then
+				p.title.Visible = false
+			end
 			continue
 		end
 		if not p.shown then
@@ -644,6 +679,19 @@ function NameLayer.tick(self: any, dt: number)
 			end
 			p.px = -1 -- size the flag with the name
 			p.size_dirty = 3
+		end
+		-- the owner's title over the name (Data/Galactic)
+		local tid = if cz ~= nil and cz.plate ~= nil then cz.plate else ""
+		if tid ~= (p.title_id or "") then
+			p.title_id = tid
+			local it = if tid ~= "" then Cosmetics.item(tid) else nil
+			if it ~= nil and it.kind == "plate" then
+				self:_title(p, it)
+				p.title_on = true
+			else
+				p.title_on = false
+			end
+			p.title_px = -1
 		end
 		local bots = self.admin_bots
 		local human = bots ~= nil and o.kind == Defs.KIND_HUMAN and not bots[id] and id ~= st.local_owner
@@ -704,6 +752,29 @@ function NameLayer.tick(self: any, dt: number)
 			p.size_dirty = math.max(0, (p.size_dirty or 1) - 1)
 			p.abs = p.frame.AbsoluteSize
 		end
+		if p.title ~= nil then
+			local tpx = px * NameLayer.TITLE_K
+			local show = p.title_on == true and tpx >= NameLayer.TITLE_MIN_PX
+			if p.title.Visible ~= show then
+				p.title.Visible = show
+			end
+			if show then
+				if p.title_px ~= px then
+					p.title_px = px
+					local tts = math.min(tpx, 100)
+					p.title.TextSize = tts
+					p.title_scale.Scale = tpx / tts
+					p.title_stroke.Thickness = math.max(1, tts * NameLayer.TITLE_GLOW_K)
+				end
+				local tp = UDim2.fromOffset(math.round(sx), top + math.round(px * 0.08))
+				if p.title.Position ~= tp then
+					p.title.Position = tp
+				end
+				if p.title.ZIndex ~= (if hovered then 22 else 20) then
+					p.title.ZIndex = if hovered then 22 else 20
+				end
+			end
+		end
 		local sz = p.abs
 		local r = p.rect
 		r[1], r[2], r[3], r[4] = sx - sz.X * 0.5, top, sx + sz.X * 0.5, top + sz.Y
@@ -718,6 +789,9 @@ function NameLayer.tick(self: any, dt: number)
 			-- (at least CROWN_MIN_PX so the leader stays easy to spot on a phone)
 			local icon = math.max(line_px * 1.1, NameLayer.CROWN_MIN_PX)
 			local lift = if p.human then p.badge.TextSize * p.scaler.Scale else 0.0
+			if p.title ~= nil and p.title.Visible then
+				lift += px * NameLayer.TITLE_K * 1.05 -- (and over the title)
+			end
 			self._crown.Size = UDim2.fromOffset(icon, icon)
 			self._crown.Position = UDim2.fromOffset(math.round(sx), math.round(sy - line_px * 1.4 - lift))
 			crown_shown = true
@@ -729,6 +803,9 @@ function NameLayer.tick(self: any, dt: number)
 	for id, p in self._plates do
 		if not seen[id] then
 			p.frame:Destroy()
+			if p.title ~= nil then
+				p.title:Destroy()
+			end
 			self._plates[id] = nil
 			self._targets[id] = nil
 		end

@@ -19,11 +19,15 @@ local ShopFlags: any = if IS_ROBLOX
 	then require((game :: any):GetService("ReplicatedStorage"):WaitForChild("Airfront").Assets.ShopFlags)
 	else require("../Assets/ShopFlags")
 
+local Galactic: any = if typeof(game) == "Instance"
+	then require((game :: any):GetService("ReplicatedStorage"):WaitForChild("Airfront").Data.Galactic)
+	else require("./Galactic")
+
 local Shop = {}
 
 Shop.DAY_S = 86400
 --- Flags in the daily shop.
-Shop.DAILY = 4
+Shop.DAILY = 6 -- (2026-11-06: the Galactic Shop: effects, titles and skins; flags left the rotation)
 --- Robux by rarity (each flag's product is created at its rarity's price: make_shop_flags.py).
 Shop.PRICES = { rare = 49, epic = 99, legendary = 149 }
 --- The item id prefix (Data/Cosmetics).
@@ -44,7 +48,18 @@ local pool: { string } = {}
 for _, f in (ShopFlags.flags or {}) :: { any } do
 	table.insert(flags, f)
 	by_key[f.key] = f
-	if f.set == nil then
+end
+-- the Galactic Shop's items (Data/Galactic): the daily rotation is theirs; the old flags stay owned and
+-- worn, and a flag product bought before still grants its flag, but no flag is on sale any more
+for _, g in Galactic.all() do
+	if g.shop ~= false and not g.pass then
+		local f = table.clone(g)
+		f.product = Galactic.PRODUCTS[g.key] or 0
+		f.staging = 0
+		f.galactic = true
+		f.card = "galactic/" .. g.key
+		table.insert(flags, f)
+		by_key[f.key] = f
 		table.insert(pool, f.key)
 	end
 end

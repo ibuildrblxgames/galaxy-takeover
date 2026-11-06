@@ -107,6 +107,9 @@ function FlagShop.on_sale(): boolean
 	return false
 end
 
+--- What a card's rarity line adds for each kind (Data/Galactic).
+FlagShop.KIND_LABEL = { fx = "  ·  NUKE EFFECT", plate = "  ·  TITLE", skin = "  ·  SKIN", flag = "  ·  FLAG" }
+
 function FlagShop.new(c: any)
 	local self = setmetatable({}, FlagShop.__mt)
 	W.Control._init(self)
@@ -141,10 +144,10 @@ function FlagShop.new(c: any)
 	self._v = v
 	self._panel:add_child(v)
 	local head = UITheme.hbox(12)
-	local title = UITheme.label("FLAG SHOP", 20, 800, UITheme.TEXT, 3)
+	local title = UITheme.label("GALACTIC SHOP", 20, 800, UITheme.TEXT, 3)
 	title.size_flags_vertical = W.SHRINK_CENTER
 	head:add_child(title)
-	self._sub = UITheme.label("New flags every day", 13, 600, UITheme.TEXT_2)
+	self._sub = UITheme.label("Effects, titles and skins everyone sees  ·  New every day", 13, 600, UITheme.TEXT_2)
 	self._sub.size_flags_horizontal = W.EXPAND_FILL
 	self._sub.size_flags_vertical = W.SHRINK_CENTER
 	head:add_child(self._sub)
@@ -227,9 +230,12 @@ function FlagShop._pressed(self, key: string)
 	local inv = self:_inv()
 	local se = self.ctx.session
 	if inv.owned[id] == true then
-		if inv.equipped.flag ~= id and se ~= nil then
+		-- (a Galactic item goes in its own slot: Data/Galactic)
+		local item = Cosmetics.item(id)
+		local slot = if item ~= nil then item.kind else "flag"
+		if inv.equipped[slot] ~= id and se ~= nil then
 			self.ctx:sfx("click")
-			se:equip("flag", id)
+			se:equip(slot, id)
 		end
 		return
 	end
@@ -327,7 +333,7 @@ function FlagShop._on_inventory(self)
 		self._pending = nil
 		local f = Shop.flag(p.key)
 		self.ctx:sfx("confirm")
-		self:_toast((if f then f.name else "Your flag") .. " is yours: you're wearing it now.")
+		self:_toast((if f then f.name else "Your item") .. " is yours: it's on now.")
 	end
 	if self.is_open then
 		self:_rebuild()
@@ -339,7 +345,7 @@ function FlagShop.tick(self)
 	if p ~= nil then
 		local limit = if p.phase == "prompt" then 180 else FlagShop.GRANT_WAIT_S
 		if os.clock() - p.since > limit then
-			self:_cancel(if p.phase == "prompt" then nil else "Your flag is on its way: it shows up in a moment.")
+			self:_cancel(if p.phase == "prompt" then nil else "Your item is on its way: it shows up in a moment.")
 		end
 	end
 end
@@ -562,7 +568,7 @@ function FlagShop._card(self, parent: Instance, key: string, pos: Vector2, size:
 	local cs = size
 	local inv = self:_inv()
 	local owned = inv.owned[it.id] == true
-	local wearing = inv.equipped.flag == it.id
+	local wearing = inv.equipped[it.kind or "flag"] == it.id
 	local pending = self._pending ~= nil and self._pending.key == key
 	local rar = Cosmetics.rarity(f.rarity)
 	local rc = c3(rar.color)
@@ -609,7 +615,7 @@ function FlagShop._card(self, parent: Instance, key: string, pos: Vector2, size:
 	local sub = new("TextLabel", {
 		BackgroundTransparency = 1,
 		FontFace = FONT_M,
-		Text = string.upper(rar.name),
+		Text = string.upper(rar.name) .. (FlagShop.KIND_LABEL[it.kind] or ""),
 		TextColor3 = rc,
 		TextSize = px(if hero then 12 else 10),
 		Position = UDim2.fromOffset(px(8), px(8 + fh + 9 + name_size)),
@@ -734,7 +740,7 @@ function FlagShop._rebuild(self)
 		table.insert(keys, "shopset_" .. set.id)
 	end
 	order += 1
-	self:_section(order, "TODAY'S FLAGS", WHITE, (c.day + 1) * Shop.DAY_S, "NEW IN ")
+	self:_section(order, "TODAY'S ITEMS", WHITE, (c.day + 1) * Shop.DAY_S, "NEW IN ")
 	order += 1
 	self:_grid(order, c.daily)
 	for _, k in c.daily do

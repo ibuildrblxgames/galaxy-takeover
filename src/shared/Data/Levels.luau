@@ -46,6 +46,7 @@ Levels.LABELS = {
 	place = "Top 3",
 	win = "Victory",
 	solo = "Solo",
+	pass = "Space Pass +25%",
 }
 
 function Levels.need(level: number): number

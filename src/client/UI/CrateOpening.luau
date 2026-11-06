@@ -733,7 +733,7 @@ end
 function CrateOpening._title_in(self, gen: number)
 	local S = self._S
 	self._title.Text = "CRATE"
-	self._subtitle.Text = "A SKIN OR FLAG · NEVER A DUPLICATE"
+	self._subtitle.Text = "A SKIN, EFFECT OR TITLE · NEVER A DUPLICATE"
 	self._title_scale.Scale = 1.8
 	tween(self._title_scale, 0.3, { Scale = 1 }, Enum.EasingStyle.Back)
 	tween(self._title, 0.12, { TextTransparency = 0 })
@@ -1047,7 +1047,7 @@ function CrateOpening._reveal(self, gen: number)
 	self._rarity_scale.Scale = 1.6
 	tween(self._rarity_scale, 0.3, { Scale = 1 }, Enum.EasingStyle.Back)
 	self._name.Text = if it then it.name else "?"
-	self._kind.Text = if it and it.kind == "flag" then "FLAG · SHOWN BY YOUR NAME" else "TERRITORY SKIN"
+	self._kind.Text = CrateOpening.KIND_TEXT[it and it.kind or "skin"] or "TERRITORY SKIN"
 	for i, l in { self._rarity, self._name, self._kind } do
 		local p = l.Position
 		l.Position = p + UDim2.fromOffset(0, S * 0.03)
@@ -1068,6 +1068,15 @@ function CrateOpening._reveal(self, gen: number)
 	self._row:set_modulate_a(0)
 	W.fade(self._row, 1.0, 0.25)
 end
+
+--- The line under a revealed item's name, by kind (Data/Galactic: effects and titles, 2026-11-06).
+CrateOpening.KIND_TEXT = {
+	skin = "TERRITORY SKIN",
+	flag = "FLAG · SHOWN BY YOUR NAME",
+	ship = "FLEET SKIN",
+	fx = "NUKE EFFECT · EVERYONE SEES YOUR BLASTS",
+	plate = "TITLE · SHOWN OVER YOUR NAME",
+}
 
 function CrateOpening._show_item(self, it: any)
 	local img = self._preview

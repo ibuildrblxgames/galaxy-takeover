@@ -624,7 +624,7 @@ local function flag_named(name: string): any
 			return (require :: any)("../../shared/Data/Cosmetics")
 		end)
 		if ok and type(Cosmetics) == "table" then
-			for _, it in Cosmetics.all() do
+			for _, it in Cosmetics.flags() do
 				if it.kind == "flag" then
 					local e = { item = it, image = Cosmetics.flag_image(it) }
 					m[string.lower(it.name)] = e

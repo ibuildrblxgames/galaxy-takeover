@@ -170,16 +170,18 @@ local function candy(parent: Instance, label: string, face: Color3, lip: Color3,
 	return b, t
 end
 
---- "5 fleet skins, 5 territory skins, 6 insignia, crates and Stars!" from the premium track.
+--- "+25% Stars & XP, Supernova nuke + title, 5 fleets, 5 skins & more!" from the premium track
+--- (2026-11-06: the time saver and the effects everyone sees lead).
 function BattlePassUI.premium_pitch(): string
-	local n = { ship = 0, skin = 0, flag = 0 }
+	local n = { ship = 0, skin = 0, flag = 0, fx = 0, plate = 0 }
 	for _, e in BattlePass.items("premium") do
 		local it = Cosmetics.item(e.id)
 		if it ~= nil and n[it.kind] ~= nil then
 			n[it.kind] += 1
 		end
 	end
-	return string.format("%d fleet skins, %d territory skins, %d insignia, crates and Stars!", n.ship, n.skin, n.flag)
+	local boost = math.floor((BattlePass.BOOST or 0) * 100 + 0.5)
+	return string.format("+%d%% Stars & XP, Supernova nuke + title, %d fleets, %d skins & more!", boost, n.ship, n.skin)
 end
 
 -- =============================================================================================
@@ -756,7 +758,7 @@ function BattlePassUI.refresh(self: any)
 	local premium = bp.premium == true
 	self.prem_title.Text = if premium then "PREMIUM ACTIVE!" else "GO PREMIUM!"
 	self.prem_sub.Text = if premium
-		then "Every gold reward is yours to claim. Keep playing to climb!"
+		then string.format("+%d%% Stars & XP is on! Every gold reward is yours to claim.", math.floor((BattlePass.BOOST or 0) * 100 + 0.5))
 		else BattlePassUI.premium_pitch()
 	self.buy.Visible = not premium
 	local claimable = 0
@@ -888,9 +890,15 @@ function BattlePassUI.close(self: any)
 end
 
 --- The launcher shows on the title screen only.
+--- A window over the title (Main) hides the SPACE PASS launcher meanwhile.
+function BattlePassUI.set_covered(self: any, on: boolean)
+	self.covered = on
+	self.launcher.Visible = self.screen == "title" and not on
+end
+
 function BattlePassUI.set_screen(self: any, name: string)
 	self.screen = name
-	self.launcher.Visible = name == "title"
+	self.launcher.Visible = name == "title" and not self.covered
 	if name ~= "title" and self.open_ then
 		self:close()
 	end

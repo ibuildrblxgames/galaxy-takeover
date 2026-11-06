@@ -13,6 +13,9 @@ BattlePass.NAME = "Season 1: First Contact"
 BattlePass.PRICE = 299 -- Robux (Products.battlepass)
 BattlePass.TIERS = 30
 BattlePass.XP_PER_TIER = 100
+--- Premium's time saver (2026-11-06, the owner: "Cosmetic + time savers only"): +BOOST Stars from
+--- every match (server/Rewards, line "pass") and +BOOST pass XP and level XP (server/Purchases).
+BattlePass.BOOST = 0.25
 
 --- XP for a match: a tenth of its Stars, at least MIN and at most MAX, so the season's
 --- TIERS * XP_PER_TIER = 3,000 XP take about 20 matches played very well (MAX each), 30 average ones
@@ -57,7 +60,7 @@ local function crates(n: number, big: boolean?): Reward
 	}
 end
 --- What an item reward says it is (the card's little tag).
-BattlePass.TAGS = { ship = "FLEET SKIN", skin = "TERRITORY", flag = "INSIGNIA" }
+BattlePass.TAGS = { ship = "FLEET SKIN", skin = "TERRITORY", flag = "INSIGNIA", fx = "NUKE EFFECT", plate = "TITLE" }
 --- (names and kinds live in Data/PassCosmetics; the card asks Data/Cosmetics for them)
 local NAMES = {
 	ship_neon = { "Neon Fleet", "ship" },
@@ -125,7 +128,8 @@ local PREMIUM: { [number]: () -> Reward } = {
 			icon = "bp/crown",
 			label = "Supernova Set + 2,500 Stars",
 			big = true,
-			items = { "skin_supernova", "ship_golden" },
+			-- (the skin, the fleet, the Supernova nuke effect and the SUPERNOVA title: Data/Galactic)
+			items = { "skin_supernova", "ship_golden", "shop_fx_supernova", "shop_title_supernova" },
 			stars = 2500,
 			tag = "LEGENDARY",
 		}

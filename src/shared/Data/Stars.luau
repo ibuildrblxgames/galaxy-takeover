@@ -55,6 +55,7 @@ Stars.LABELS = {
 	victory = "Victory",
 	double = "2x Stars",
 	general = "General +50%",
+	pass = "Space Pass +25%",
 }
 
 export type Result = {

@@ -399,8 +399,8 @@ function MapView.bind_state(self: any, state: any)
 	self:_connect(state.road_removed, function(rid)
 		call(self.layers.roads, "mark_road_dirty", rid)
 	end)
-	self:_connect(state.nuke_detonated, function(uid, kind, tile, radius, _owner)
-		self:_on_nuke_detonated(uid, kind, tile, radius)
+	self:_connect(state.nuke_detonated, function(uid, kind, tile, radius, owner)
+		self:_on_nuke_detonated(uid, kind, tile, radius, owner)
 	end)
 	self:_connect(state.unit_removed, function(uid, reason)
 		self:_on_unit_removed(uid, reason)
@@ -715,7 +715,7 @@ function MapView._on_tile_hovered(self: any, tile: number)
 	call(self.layers.ranges, "set_hover_tile", tile, 14.0 / self.rig.scale)
 end
 
-function MapView._on_nuke_detonated(self: any, uid: number, kind: number, tile: number, radius: number)
+function MapView._on_nuke_detonated(self: any, uid: number, kind: number, tile: number, radius: number, owner: number?)
 	local fx = self.layers.fx
 	if fx == nil then
 		return
@@ -738,7 +738,7 @@ function MapView._on_nuke_detonated(self: any, uid: number, kind: number, tile: 
 		call(fx, "burst", "sam", tile % W + 0.5, tile // W + 0.5)
 		return
 	end
-	call(fx, "nuke", kind, tile, radius)
+	call(fx, "nuke", kind, tile, radius, owner)
 end
 
 --- Game admins: which "players" are bot players (owner id → true); nil hides the HUMAN badges.

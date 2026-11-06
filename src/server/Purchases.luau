@@ -89,6 +89,8 @@ type Record = {
 	owned: { [string]: boolean },
 	equipped: { skin: string?, flag: string?, ship: string? },
 	crates_bought: number,
+	--- crates opened (every Cosmetics.PITY_EVERY-th is Epic or better; 2026-11-06)
+	crates_opened: number?,
 	stars: number,
 	stars_earned: number,
 	unlocks: { [string]: boolean },
@@ -107,6 +109,10 @@ type Record = {
 	-- the player's level and stats (Data/Levels; add_match): matches / wins / streak / best count
 	-- multiplayer matches only
 	lvl: Stats,
+	-- social rewards (Purchases.claim_group / note_referral / add_match): group = the group crate was
+	-- given; invited_by = who invited this player (0 none); invite_paid = that invite's crates were
+	-- given; invites = friends this player invited who played (paid up to INVITE_CAP)
+	social: { group: boolean, invited_by: number, invite_paid: boolean, invites: number },
 }
 --- (Data/Levels) xp: total XP; matches, wins, streak (wins in a row now), best (longest streak),
 --- kills: multiplayer; solo / solo_wins: solo matches against the AI
@@ -212,6 +218,7 @@ local function clean(v: any, user_id: number?): Record
 		gifts = {},
 		bp = { season = BattlePass.SEASON, xp = 0, premium = false, free = {}, prem = {} },
 		lvl = { xp = 0, matches = 0, wins = 0, streak = 0, best = 0, kills = 0, solo = 0, solo_wins = 0 },
+		social = { group = false, invited_by = 0, invite_paid = false, invites = 0 },
 	}
 	if type(v) ~= "table" then
 		v = {}
@@ -242,6 +249,12 @@ local function clean(v: any, user_id: number?): Record
 		for _, k in STAT_KEYS do
 			(rec.lvl :: any)[k] = count(v.lvl[k])
 		end
+	end
+	if type(v.social) == "table" then
+		rec.social.group = v.social.group == true
+		rec.social.invited_by = count(v.social.invited_by)
+		rec.social.invite_paid = v.social.invite_paid == true
+		rec.social.invites = count(v.social.invites)
 	end
 	rec.tutorial_paid = if v.tutorial_paid == true then true else nil
 	local gday = tonumber(v.general_day)
@@ -288,6 +301,7 @@ local function clean(v: any, user_id: number?): Record
 		end
 	end
 	rec.crates_bought = math.max(0, math.floor(tonumber(v.crates_bought) or 0))
+	rec.crates_opened = count(v.crates_opened)
 	if type(v.credits) == "table" then
 		for k, n in v.credits do
 			if type(k) == "string" and type(n) == "number" and n == n then
@@ -338,6 +352,7 @@ local function remember(player: any, rec: Record)
 		owned = rec.owned,
 		equipped = rec.equipped,
 		crates_bought = rec.crates_bought,
+		crates_opened = rec.crates_opened,
 		stars = rec.stars,
 		stars_earned = rec.stars_earned,
 		unlocks = rec.unlocks,
@@ -345,6 +360,7 @@ local function remember(player: any, rec: Record)
 		starter = rec.starter,
 		bp = rec.bp,
 		lvl = rec.lvl,
+		social = rec.social,
 	}
 end
 
@@ -422,12 +438,20 @@ function Purchases.inventory(player: any): any
 		owned = owned,
 		equipped = if i ~= nil then table.clone(i.equipped) else {},
 		crates_bought = if i ~= nil then i.crates_bought else 0,
+		crates_opened = if i ~= nil then i.crates_opened or 0 else 0,
 		stars = if i ~= nil then i.stars else 0,
 		unlocks = unlocks,
 		starter = Purchases.starter_state(player),
 		bp = Purchases.bp_state(player),
 		lvl = Purchases.level_state(player),
+		social = Purchases.social_state(player),
 	}
+end
+
+--- Has the player this season's Space Pass premium (its +BattlePass.BOOST Stars and XP)?
+function Purchases.pass_premium(player: any): boolean
+	local i = inv[player]
+	return i ~= nil and i.bp ~= nil and i.bp.premium == true and i.bp.season == BattlePass.SEASON
 end
 
 --- The Space Pass for the client: { season, xp, premium, free = { tier }, prem = { tier } }.
@@ -518,7 +542,7 @@ end
 --- What the player shows in a match: { skin = id?, flag = id? } (nil when nothing is equipped).
 function Purchases.equipped(player: any): any
 	local i = inv[player]
-	if i == nil or (i.equipped.skin == nil and i.equipped.flag == nil and i.equipped.ship == nil) then
+	if i == nil or next(i.equipped) == nil then
 		return nil
 	end
 	return table.clone(i.equipped)
@@ -592,7 +616,9 @@ function Purchases.grant(user_id: number, kind: string, receipt: string, n: numb
 					rec.stars = math.min(rec.stars + back, Purchases.MAX_STARS)
 				else
 					rec.owned[id] = true
-					rec.equipped.flag = id -- (chosen and paid for: worn at once)
+					-- (chosen and paid for: worn at once, in its own slot: a Galactic item's is its kind)
+					local bought = Cosmetics.item(id)
+					rec.equipped[if bought ~= nil then bought.kind else "flag"] = id
 				end
 			elseif kind == "starter" then
 				local t = now_s()
@@ -816,12 +842,14 @@ function Purchases.open_crate(player: any): (boolean, string?)
 				why = "no crate"
 				return nil
 			end
-			local id = Cosmetics.roll(rec.owned, rng:NextNumber(), rng:NextNumber())
+			local opened = rec.crates_opened or 0
+			local id = Cosmetics.roll(rec.owned, rng:NextNumber(), rng:NextNumber(), Cosmetics.is_pity(opened))
 			if id == nil then
 				why = "everything owned"
 				return nil
 			end
 			rec.credits.crate -= 1
+			rec.crates_opened = opened + 1
 			rec.owned[id] = true
 			local it = Cosmetics.item(id)
 			if it ~= nil and rec.equipped[it.kind] == nil then
@@ -846,7 +874,7 @@ end
 
 --- Equip an owned item in its slot ("skin" / "flag"), or clear the slot (id false). Yields.
 function Purchases.equip(player: any, slot: string, id: any): (boolean, string?)
-	if slot ~= "skin" and slot ~= "flag" and slot ~= "ship" then
+	if table.find(Cosmetics.SLOTS, slot) == nil then
 		return false, "bad slot"
 	end
 	if id ~= false then
@@ -1069,6 +1097,145 @@ function Purchases.buy_unlock(player: any, item_key: any): (boolean, string?)
 	return true, nil
 end
 
+--- Social rewards (2026-11-06, the owner): one crate for joining the group, and one crate each when a
+--- friend you invited finishes their first match (for the friend too), for up to INVITE_CAP friends.
+Purchases.GROUP_ID = 469759771 -- Bold Pixel Studios
+Purchases.INVITE_CAP = 10
+
+--- The player's record has loaded on this server.
+function Purchases.loaded(player: any): boolean
+	return inv[player] ~= nil
+end
+
+--- For the client: { group = claimed, invites = friends paid for, invite_cap }.
+function Purchases.social_state(player: any): any
+	local i = inv[player]
+	local s = i and i.social
+	return {
+		group = s ~= nil and s.group == true,
+		invites = if s ~= nil then s.invites else 0,
+		invite_cap = Purchases.INVITE_CAP,
+		invited_by = if s ~= nil then s.invited_by else 0,
+	}
+end
+
+--- The group crate: once, for a member of the group (deps.in_group(user_id) -> boolean, yields).
+--- Returns "granted" | "claimed" (had it already) | "not_member" | "error".
+function Purchases.claim_group(player: any): string
+	local i = inv[player]
+	if i == nil or i.social == nil then
+		return "error"
+	end
+	if i.social.group then
+		return "claimed"
+	end
+	local ok_m, member = pcall(function()
+		return deps.in_group ~= nil and deps.in_group(player.UserId) == true
+	end)
+	if not ok_m then
+		return "error"
+	end
+	if not member then
+		return "not_member"
+	end
+	local result = "error"
+	local stored: Record? = nil
+	local ok = pcall(function()
+		update(player.UserId, function(old: any): any
+			local rec = clean(old, player.UserId)
+			if rec.social.group then
+				result = "claimed"
+				stored = rec
+				return nil
+			end
+			rec.social.group = true
+			rec.credits.crate = math.min((rec.credits.crate or 0) + 1, Purchases.MAX_CREDITS)
+			result = "granted"
+			stored = rec
+			return rec
+		end)
+	end)
+	if not ok or stored == nil then
+		return "error"
+	end
+	remember(player, stored :: Record)
+	notify(player)
+	if result == "granted" then
+		log(string.format("%d joined the group: +1 crate", player.UserId))
+	end
+	return result
+end
+
+--- A brand-new player who came from a friend's invite (Roblox's ReferredByPlayerId): remember who
+--- invited them; the crates are given at their first finished match (add_match). Yields.
+function Purchases.note_referral(player: any, inviter: number)
+	inviter = math.floor(tonumber(inviter) or 0)
+	if inviter <= 0 or inviter == player.UserId then
+		return
+	end
+	local i = inv[player]
+	if i == nil or i.social == nil or i.social.invited_by ~= 0 then
+		return
+	end
+	-- (new: nothing earned or played yet)
+	if (i.stars_earned or 0) > 0 or (i.lvl and (i.lvl.xp or 0) > 0) then
+		return
+	end
+	local stored: Record? = nil
+	pcall(function()
+		update(player.UserId, function(old: any): any
+			local rec = clean(old, player.UserId)
+			if rec.social.invited_by ~= 0 or rec.stars_earned > 0 or rec.lvl.xp > 0 then
+				return nil
+			end
+			rec.social.invited_by = inviter
+			stored = rec
+			return rec
+		end)
+	end)
+	if stored ~= nil then
+		remember(player, stored :: Record)
+		log(string.format("%d was invited by %d", player.UserId, inviter))
+	end
+end
+
+--- The invite crates for `player`'s first finished match: one for them (already in `rec`, written by
+--- the caller) and one for whoever invited them, up to INVITE_CAP. Yields.
+local function pay_inviter(inviter: number, friend: number)
+	local paid = false
+	pcall(function()
+		update(inviter, function(old: any): any
+			local rec = clean(old, inviter)
+			if rec.social.invites >= Purchases.INVITE_CAP then
+				return nil
+			end
+			rec.social.invites += 1
+			rec.credits.crate = math.min((rec.credits.crate or 0) + 1, Purchases.MAX_CREDITS)
+			paid = true
+			return rec
+		end)
+	end)
+	if paid then
+		log(string.format("%d's friend %d played: +1 crate", inviter, friend))
+		-- (the inviter on this server sees it now; on another server, at their next load or change)
+		for p in inv do
+			if typeof(p) == "Instance" and p.UserId == inviter then
+				local ok, v = pcall(function()
+					return deps.datastore:GetAsync(key(inviter))
+				end)
+				if ok then
+					remember(p, clean(v, inviter))
+					notify(p)
+					if deps.invite_paid then
+						pcall(deps.invite_paid, p, friend)
+					end
+				end
+			end
+		end
+	end
+	return paid
+end
+
 --- The player's level and stats for the client (Data/Levels): { xp, level, into, need, matches, wins,
 --- streak, best, kills, solo, solo_wins }.
 function Purchases.level_state(player: any): any
@@ -1095,11 +1262,21 @@ function Purchases.add_match(player: any, result: any, mode: string): any
 	local kills = if type(result) == "table" then math.max(0, math.floor(tonumber(result.kills) or 0)) else 0
 	local before, after, crates = 1, 1, 0
 	local stored: Record? = nil
+	local invited_by = 0
 	local ok, err = pcall(function()
 		update(player.UserId, function(old: any): any
 			local rec = clean(old, player.UserId)
 			local s = rec.lvl
 			before = Levels.level_of(s.xp)
+			-- the Space Pass's premium: +BOOST level XP (a line of its own, once per write)
+			if rec.bp.premium and pay.total > 0 and not pay.boosted then
+				local extra = math.floor(pay.total * (BattlePass.BOOST or 0) + 0.5)
+				if extra > 0 then
+					pay.boosted = true
+					table.insert(pay.lines, { "pass", extra })
+					pay.total += extra
+				end
+			end
 			s.xp = math.min(s.xp + pay.total, Purchases.MAX_STARS)
 			after = Levels.level_of(s.xp)
 			if public then
@@ -1122,6 +1299,13 @@ function Purchases.add_match(player: any, result: any, mode: string): any
 			if crates > 0 then
 				rec.credits.crate = math.min((rec.credits.crate or 0) + crates, Purchases.MAX_CREDITS)
 			end
+			-- a friend's invite: their first finished match pays a crate to each of them
+			invited_by = 0
+			if rec.social.invited_by > 0 and not rec.social.invite_paid then
+				rec.social.invite_paid = true
+				rec.credits.crate = math.min((rec.credits.crate or 0) + 1, Purchases.MAX_CREDITS)
+				invited_by = rec.social.invited_by
+			end
 			stored = rec
 			return rec
 		end)
@@ -1135,6 +1319,12 @@ function Purchases.add_match(player: any, result: any, mode: string): any
 	if crates > 0 then
 		log(string.format("%d reached level %d: +%d crate", player.UserId, after, crates))
 	end
+	if invited_by > 0 then
+		task.spawn(pay_inviter, invited_by, player.UserId)
+		if deps.invite_paid then
+			pcall(deps.invite_paid, player, invited_by)
+		end
+	end
 	return { xp = pay.total, lines = pay.lines, level_before = before, level = after, crates = crates,
 		stats = (stored :: Record).lvl }
 end
@@ -1146,7 +1336,9 @@ function Purchases.add_bp_xp(player: any, stars: number): number
 	local ok, err = pcall(function()
 		update(player.UserId, function(old: any): any
 			local rec = clean(old, player.UserId)
-			rec.bp.xp = math.min(rec.bp.xp + add, BattlePass.TIERS * BattlePass.XP_PER_TIER * 4)
+			-- (premium: +BOOST, Data/BattlePass)
+			local gain = if rec.bp.premium then math.floor(add * (1 + (BattlePass.BOOST or 0)) + 0.5) else add
+			rec.bp.xp = math.min(rec.bp.xp + gain, BattlePass.TIERS * BattlePass.XP_PER_TIER * 4)
 			stored = rec
 			return rec
 		end)

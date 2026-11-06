@@ -46,6 +46,9 @@ MatchServer.__index = MatchServer
 --- and a skin among 30 bots.
 MatchServer.BOT_FLAG_SHARE = 0.08
 MatchServer.BOT_SKIN_SHARE = 0.04
+--- Galaxy Takeover (2026-11-06): bots with a weapon effect / a title (not a Legendary one).
+MatchServer.BOT_FX_SHARE = 0.1
+MatchServer.BOT_PLATE_SHARE = 0.08
 
 MatchServer.STAGE_IDLE = "idle"
 MatchServer.STAGE_LOBBY = "lobby"
@@ -887,11 +890,18 @@ function MatchServer._dress_bots(self: any, ids: any)
 		return if type(v) == "number" and v > 0 then v else nil
 	end
 	local flags, skins = {}, {}
+	for _, it in Cosmetics.flags() do
+		table.insert(flags, it.id)
+	end
+	-- (and now and then an effect or a title, so players see what the Galactic Shop has: Data/Galactic)
+	local fxs, plates = {}, {}
 	for _, it in Cosmetics.all() do
-		if it.kind == "flag" then
-			table.insert(flags, it.id)
-		elseif it.rarity == "common" or it.rarity == "rare" then
+		if it.kind == "skin" and (it.rarity == "common" or it.rarity == "rare") then
 			table.insert(skins, it.id)
+		elseif it.kind == "fx" then
+			table.insert(fxs, it.id)
+		elseif it.kind == "plate" and it.rarity ~= "legendary" then
+			table.insert(plates, it.id)
 		end
 	end
 	for _, id in ids do
@@ -902,8 +912,14 @@ function MatchServer._dress_bots(self: any, ids: any)
 		if #skins > 0 and math.random() < MatchServer.BOT_SKIN_SHARE then
 			c.skin = skins[math.random(1, #skins)]
 		end
+		if #fxs > 0 and math.random() < MatchServer.BOT_FX_SHARE then
+			c.fx = fxs[math.random(1, #fxs)]
+		end
+		if #plates > 0 and math.random() < MatchServer.BOT_PLATE_SHARE then
+			c.plate = plates[math.random(1, #plates)]
+		end
 		c.face = face()
-		if c.flag or c.skin or c.face then
+		if c.flag or c.skin or c.face or c.fx or c.plate then
 			self._bot_cosmetics[id] = c
 		end
 	end
@@ -926,8 +942,10 @@ function MatchServer.cosmetics_map(self: any): { [number]: any }
 			local face = if uid ~= nil and uid > 0 then uid else nil
 			local skin, flag = if c ~= nil then c.skin else nil, if c ~= nil then c.flag else nil
 			local ship = if c ~= nil then c.ship else nil
-			if skin ~= nil or flag ~= nil or face ~= nil or ship ~= nil then
-				map[part.owner] = { skin = skin, flag = flag, face = face, ship = ship }
+			-- (Galaxy Takeover: the weapon effect and the title, Data/Galactic)
+			local fx, plate = if c ~= nil then c.fx else nil, if c ~= nil then c.plate else nil
+			if skin ~= nil or flag ~= nil or face ~= nil or ship ~= nil or fx ~= nil or plate ~= nil then
+				map[part.owner] = { skin = skin, flag = flag, face = face, ship = ship, fx = fx, plate = plate }
 			end
 		end
 	end

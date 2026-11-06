@@ -41,6 +41,10 @@ details.
   from the `@iconify-json/noto` package and rendered to PNG in `assets/embedded/bp/` and
   `assets/embedded/insignia/` (`tools/assets/make_pass_cosmetics.py`). Fleet and territory skins are
   Galaxy Takeover' own designs.
+- **Galactic Shop art** (`assets/embedded/galactic/`, `assets/embedded/fx/map_fx_mono.png`) —
+  Galaxy Takeover' own, drawn by `tools/assets/make_galactic_art.py`; the titles' lettering is set
+  in Montserrat Black by Julieta Ulanovsky et al., SIL Open Font License 1.1
+  (https://openfontlicense.org). The font itself is not included.
 - **Country flags** — Wikimedia Commons, public domain or CC0 files; see `assets/flags/SOURCE.txt`.
 - **World map** — built from public-domain geographic data (see the RoWorld history, 2026-10-26).
 - Other flags, map icons, sprites and effects are RoWorld's own work under the AGPL.

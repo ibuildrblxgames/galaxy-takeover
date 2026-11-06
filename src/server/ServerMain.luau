@@ -983,6 +983,16 @@ function ServerMain.start()
 				)
 				send(player, OP.HOP_RESULT, going)
 			end)
+		elseif op == OP.GROUP_CLAIM then
+			local c_used = credit_budget[player] or 0
+			if c_used >= ServerMain.MAX_CREDIT_USES_PER_SEC then
+				return
+			end
+			credit_budget[player] = c_used + 1
+			task.spawn(function()
+				local ok, r = pcall(Purchases.claim_group, player)
+				send(player, OP.SOCIAL, { kind = "group", result = if ok then r else "error" })
+			end)
 		elseif op == OP.LEADERBOARD then
 			-- (the lobby's leaderboard window: one read of the boards a minute per server, kept for all)
 			local c_used = credit_budget[player] or 0
@@ -1465,6 +1475,24 @@ function ServerMain.start()
 	Purchases.configure({
 		datastore = purchase_store,
 		players = Players,
+		-- social rewards: membership of Bold Pixel Studios (fresh, not Player:IsInGroup's cached
+		-- answer: they may have joined a moment ago)
+		in_group = function(user_id: number): boolean
+			local groups = game:GetService("GroupService"):GetGroupsAsync(user_id)
+			for _, g in groups do
+				if g.Id == Purchases.GROUP_ID then
+					return true
+				end
+			end
+			return false
+		end,
+		invite_paid = function(player: Player, other: number)
+			local name = ""
+			pcall(function()
+				name = Players:GetNameFromUserIdAsync(other)
+			end)
+			send(player, OP.SOCIAL, { kind = "invite", result = "granted", name = name })
+		end,
 		notify = function(player: Player, credits: any)
 			send(player, OP.CREDITS, credits)
 		end,
@@ -1535,6 +1563,7 @@ function ServerMain.start()
 			return Purchases.has_unlock(player, "stars2x")
 		end,
 		general = General.active,
+		pass_premium = Purchases.pass_premium,
 		send = function(player: Player, payload: any)
 			send(player, OP.STARS, payload)
 			pcall(Analytics.report, player, "stars_paid", payload.total)
@@ -1640,6 +1669,23 @@ function ServerMain.start()
 		tag_launch(player)
 		tag_spectator(player)
 		task.spawn(join_party_on_arrival, player)
+		-- a friend's invite (Roblox fills ReferredByPlayerId): remembered once the record is in
+		task.spawn(function()
+			local ok, jd = pcall(function()
+				return player:GetJoinData()
+			end)
+			local by = if ok and type(jd) == "table" then tonumber(jd.ReferredByPlayerId) else nil
+			if by == nil or by <= 0 then
+				return
+			end
+			local t0 = os.clock()
+			while player.Parent == Players and not Purchases.loaded(player) and os.clock() - t0 < 60 do
+				task.wait(1)
+			end
+			if player.Parent == Players then
+				Purchases.note_referral(player, by)
+			end
+		end)
 		check_admin(player)
 		SettingsStore.load(player)
 		if host ~= nil then

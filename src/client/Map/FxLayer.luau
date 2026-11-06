@@ -40,6 +40,7 @@ local Rules = require(Airfront:WaitForChild("Core"):WaitForChild("Rules")) :: an
 local MapFx = require(Airfront:WaitForChild("Assets"):WaitForChild("MapFx")) :: any
 local EmbeddedImage = require(script.Parent.Parent:WaitForChild("UI"):WaitForChild("EmbeddedImage")) :: any
 local FrameClock = require(script.Parent:WaitForChild("FrameClock")) :: any
+local FxColors = require(script.Parent:WaitForChild("FxColors")) :: any
 
 local FxLayer = {}
 FxLayer.__index = FxLayer
@@ -97,6 +98,8 @@ local function fx_row(name: string, frame_s: number, world: number, min_px: numb
 		loop = loop,
 	}
 end
+--- The grey copy of the explosions atlas a weapon effect is drawn from (tools/assets/make_galactic_art.py).
+FxLayer.MONO_ATLAS = "fx/map_fx_mono"
 FxLayer.BURSTS = {
 	building = fx_row("building", 0.07, 18, 32),
 	sam = fx_row("sam", 0.08, 40, 60),
@@ -173,7 +176,18 @@ type PopGui = {
 	stroke_t: number,
 }
 --- (`life`, `fade_in`, `fade_out`: debris only; a burst ends with its last frame)
-type Burst = { u: number, v: number, t0: number, row: any, life: number?, fade_in: number?, fade_out: number? }
+--- (`tint`: an owner's weapon effect, Data/Galactic: drawn from the grey copy of the atlas,
+--- fx/map_fx_mono, in that colour)
+type Burst = {
+	u: number,
+	v: number,
+	t0: number,
+	row: any,
+	life: number?,
+	fade_in: number?,
+	fade_out: number?,
+	tint: Color3?,
+}
 type BurstGui = {
 	img: ImageLabel,
 	vis: boolean,
@@ -186,6 +200,7 @@ type BurstGui = {
 	ox: number,
 	oy: number,
 	img_t: number,
+	tint: Color3?,
 }
 type Bonus = { u: number, v: number, t0: number, text: string }
 type BonusGui = {
@@ -362,7 +377,8 @@ function FxLayer._warhead_debris(self: any, tile: number): boolean
 end
 
 --- GameState.nuke_detonated(uid, kind, tile, radius, owner).
-function FxLayer.nuke(self: any, kind: number, tile: number, radius: number)
+--- `owner`: whose nuke (their weapon effect colours it, Map/FxColors).
+function FxLayer.nuke(self: any, kind: number, tile: number, radius: number, owner: number?)
 	-- a MIRV splitting into its warheads: nothing (no look radius of its own; a
 	-- flash its spread wide whitened the screen)
 	if kind == Defs.N_MIRV then
@@ -378,8 +394,9 @@ function FxLayer.nuke(self: any, kind: number, tile: number, radius: number)
 	end
 	-- a strike (a shell, an air strike, a slug; Data/Arsenal) is a small burst: no flash, no shake
 	-- for a shell, a nudge for the others
+	local fxc, fxc2 = FxColors.of(self._state, owner)
 	if Rules.NUKE_FLAT ~= nil and Rules.NUKE_FLAT[kind] then
-		local col = if kind == Defs.N_SLUG then Color3.new(0.75, 0.6, 1) else Color3.new(1, 0.72, 0.35)
+		local col = fxc or (if kind == Defs.N_SLUG then Color3.new(0.75, 0.6, 1) else Color3.new(1, 0.72, 0.35))
 		add(self, tile, 0, math.max(r, 2.5) * 1.15, if kind == Defs.N_SHELL then 0.45 else 0.8, col, false)
 		if kind ~= Defs.N_SHELL then
 			local cam = self.view.rig
@@ -401,13 +418,17 @@ function FxLayer.nuke(self: any, kind: number, tile: number, radius: number)
 		0,
 		(if look then look / k else r) * FxLayer.NUKE_SHOCK_K,
 		FxLayer.NUKE_SHOCK_S,
-		Color3.new(1, 0.92, 0.75),
+		fxc2 or Color3.new(1, 0.92, 0.75),
 		kind ~= Defs.N_WARHEAD
 	)
+	if fxc ~= nil then
+		-- an effect's own ring in its main colour, a little behind the shockwave
+		add(self, tile, 0, (if look then look / k else r) * FxLayer.NUKE_SHOCK_K * 0.8, FxLayer.NUKE_SHOCK_S * 1.3, fxc, false)
+	end
 	if st ~= nil and look ~= nil and tile >= 0 then
 		local W = st.map.W or Defs.W
 		local u, v = tile % W + 0.5, tile // W + 0.5
-		self:burst("nuke", u, v)
+		self:burst("nuke", u, v, fxc)
 		if kind ~= Defs.N_WARHEAD or self:_warhead_debris(tile) then
 			local now = FrameClock.now()
 			for _, d in FxLayer.debris_plan(tile, look, k) do
@@ -422,6 +443,7 @@ function FxLayer.nuke(self: any, kind: number, tile: number, radius: number)
 					life = FxLayer.DEBRIS_S,
 					fade_in = FxLayer.DEBRIS_FADE_IN,
 					fade_out = FxLayer.DEBRIS_FADE_OUT,
+					tint = fxc,
 				})
 			end
 		end
@@ -441,12 +463,12 @@ function FxLayer.pop(self: any, tile: number, col: Color3?)
 end
 
 --- An explosion sprite (BURSTS) at map position (u, v) (tile + 0.5 is the tile's centre).
-function FxLayer.burst(self: any, kind: string, u: number, v: number)
+function FxLayer.burst(self: any, kind: string, u: number, v: number, tint: Color3?)
 	local row = FxLayer.BURSTS[kind]
 	if self._state == nil or row == nil or #self._bursts >= FxLayer.BURST_MAX then
 		return
 	end
-	table.insert(self._bursts, { u = u, v = v, t0 = FrameClock.now(), row = row })
+	table.insert(self._bursts, { u = u, v = v, t0 = FrameClock.now(), row = row, tint = tint })
 end
 
 --- GameState.structure_removed (the structure is still in the state): the ones a capture destroys go
@@ -868,8 +890,20 @@ local function bursts_step(self: any, cam: any, now: number, list: { Burst }, po
 				ox = -1,
 				oy = -1,
 				img_t = -1,
+				tint = nil,
 			}
 			pool[n] = g
+		end
+		if g.tint ~= b.tint then
+			-- (an owner's effect: the grey atlas in their colour; the default: the coloured atlas)
+			g.tint = b.tint
+			if b.tint ~= nil and EmbeddedImage.has(FxLayer.MONO_ATLAS) then
+				EmbeddedImage.apply(g.img, FxLayer.MONO_ATLAS, MapFx.id)
+				g.img.ImageColor3 = b.tint
+			else
+				EmbeddedImage.apply(g.img, "fx/map_fx", MapFx.id)
+				g.img.ImageColor3 = Color3.new(1, 1, 1)
+			end
 		end
 		-- (debris sit still between their frames, full strength mid-life: mostly nothing to write)
 		local img = g.img

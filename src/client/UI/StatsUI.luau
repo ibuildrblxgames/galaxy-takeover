@@ -849,10 +849,19 @@ function StatsUI.close(self: any)
 end
 
 --- The launchers show on the title screen only (the level note shows anywhere).
+--- A window over the title (the Locker, the shop, a crate opening, the Space Pass: Main) hides the
+--- level card and the LEADERBOARD button meanwhile; they sit in a ScreenGui above those windows.
+function StatsUI.set_covered(self: any, on: boolean)
+	self.covered = on
+	local v = self.screen == "title" and not on
+	self.launcher.Visible = v
+	self.level_card.Visible = v
+end
+
 function StatsUI.set_screen(self: any, name: string)
 	self.screen = name
-	self.launcher.Visible = name == "title"
-	self.level_card.Visible = name == "title"
+	self.launcher.Visible = name == "title" and not self.covered
+	self.level_card.Visible = name == "title" and not self.covered
 	if name ~= "title" and self.open_ then
 		self:close()
 	end

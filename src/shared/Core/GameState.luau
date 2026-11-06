@@ -235,7 +235,7 @@ function GameState.new(world: any?)
 	self._req_last = {} :: { [number]: number }
 	--- owner id → { skin = id?, flag = id? } (Data/Cosmetics): outside the Sim — the match server
 	--- sends it (OP.COSMETICS), a solo match sets the player's own
-	self.cosmetics = {} :: { [number]: { skin: string?, flag: string?, face: number?, ship: string? } }
+	self.cosmetics = {} :: { [number]: { skin: string?, flag: string?, face: number?, ship: string?, fx: string?, plate: string? } }
 	return self
 end
 
@@ -256,14 +256,25 @@ function GameState.set_cosmetics(self: any, map: { [any]: any }, full: boolean?)
 		local face = if type(v) == "table" and type(v.face) == "number" and v.face > 0 then v.face else nil
 		-- (Galaxy Takeover: the fleet skin, Data/PassCosmetics)
 		local ship = if type(v) == "table" and type(v.ship) == "string" then v.ship else nil
+		-- (and the weapon effect and the title, Data/Galactic)
+		local fx = if type(v) == "table" and type(v.fx) == "string" then v.fx else nil
+		local plate = if type(v) == "table" and type(v.plate) == "string" then v.plate else nil
 		local old = self.cosmetics[id]
-		if skin == nil and flag == nil and face == nil and ship == nil then
+		if skin == nil and flag == nil and face == nil and ship == nil and fx == nil and plate == nil then
 			if old ~= nil then
 				self.cosmetics[id] = nil
 				table.insert(changed, id)
 			end
-		elseif old == nil or old.skin ~= skin or old.flag ~= flag or old.face ~= face or old.ship ~= ship then
-			self.cosmetics[id] = { skin = skin, flag = flag, face = face, ship = ship }
+		elseif
+			old == nil
+			or old.skin ~= skin
+			or old.flag ~= flag
+			or old.face ~= face
+			or old.ship ~= ship
+			or old.fx ~= fx
+			or old.plate ~= plate
+		then
+			self.cosmetics[id] = { skin = skin, flag = flag, face = face, ship = ship, fx = fx, plate = plate }
 			table.insert(changed, id)
 		end
 	end

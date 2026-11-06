@@ -27,6 +27,9 @@ local ShopFlags: any = if IS_ROBLOX
 local Shop: any = if IS_ROBLOX
 	then require((game :: any):GetService("ReplicatedStorage"):WaitForChild("Airfront").Data.Shop)
 	else require("./Shop")
+local Galactic: any = if IS_ROBLOX
+	then require((game :: any):GetService("ReplicatedStorage"):WaitForChild("Airfront").Data.Galactic)
+	else require("./Galactic")
 local PassCosmetics: any = if IS_ROBLOX
 	then require((game :: any):GetService("ReplicatedStorage"):WaitForChild("Airfront").Data.PassCosmetics)
 	else require("./PassCosmetics")
@@ -338,7 +341,12 @@ Cosmetics.GENERAL = { id = "general", name = "General", odds = 0, color = 0xD9B2
 --- Space Pass claim (server/Purchases.bp_claim) gives one, and anyone given one may own it.
 Cosmetics.PASS = { id = "pass", name = "Space Pass", odds = 0, color = 0x38E1FF }
 --- The equip slots (Purchases, the Locker): territory skin, insignia / flag, fleet.
-Cosmetics.SLOTS = { "skin", "flag", "ship" }
+Cosmetics.SLOTS = { "skin", "flag", "ship", "fx", "plate" }
+--- Galaxy Takeover (2026-11-06): effects (kind "fx") and titles (kind "plate"), Data/Galactic; a crate
+--- gives one of the crate items (skins, effects, titles: no flags any more), and every PITY_EVERY-th
+--- crate opened is Epic or better while there is one left.
+Cosmetics.PITY_EVERY = 5
+Cosmetics.PITY_RANK = 3 -- (RARITIES' index: 3 = Epic)
 
 --- Alpha of the secondary tiles (the primary fill is MapSurface.TERRITORY_ALPHA, 150).
 Cosmetics.SECONDARY_ALPHA = 190
@@ -353,13 +361,15 @@ for _, s in Cosmetics.skins do
 	items[it.id] = it
 	table.insert(order, it)
 end
+-- (country flags stay items, owned and worn, but crates no longer give them: 2026-11-06)
+local flag_items: { Item } = {}
 for _, f in (Flags.flags or {}) :: { any } do
 	local it: any = table.clone(f)
 	it.id = "flag_" .. f.code
 	it.kind = "flag"
 	it.rarity = "common"
 	items[it.id] = it
-	table.insert(order, it)
+	table.insert(flag_items, it)
 end
 -- (exclusives resolve by id like any item, but stay out of `order`: the crates, their odds, bot players)
 local exclusives: { Item } = {}
@@ -406,6 +416,17 @@ for _, sh in PassCosmetics.ships or {} do
 	items[it.id] = it
 	table.insert(pass_items, it)
 end
+for _, g in Galactic.all() do
+	if g.pass then
+		local it: any = table.clone(g)
+		it.id = Shop.item_id(g.key)
+		it.rarity = "pass"
+		it.pass = true
+		it.card = "galactic/" .. g.key
+		items[it.id] = it
+		table.insert(pass_items, it)
+	end
+end
 for _, ins in PassCosmetics.insignia or {} do
 	local it: any = table.clone(ins)
 	it.kind = "flag"
@@ -416,9 +437,21 @@ for _, ins in PassCosmetics.insignia or {} do
 	table.insert(pass_items, it)
 end
 
--- (shop flags resolve by id too, and stay out of `order` like the exclusives)
+-- (shop flags resolve by id too, and stay out of `order` like the exclusives; the Galactic Shop's
+-- items marked `crate` are in the crates as well)
 local shop_items: { Item } = {}
 for _, f in Shop.flags() do
+	if f.galactic then
+		local it: any = table.clone(f)
+		it.id = Shop.item_id(f.key)
+		it.shop = true
+		items[it.id] = it
+		table.insert(shop_items, it)
+		if f.crate then
+			table.insert(order, it)
+		end
+		continue
+	end
 	local it: any = {
 		id = Shop.item_id(f.key),
 		kind = "flag",
@@ -447,6 +480,22 @@ end
 --- Every crate item (skins first, then flags by code). Exclusives are not in it (Cosmetics.exclusives).
 function Cosmetics.all(): { Item }
 	return order
+end
+
+--- Is the `opened`+1-th crate a pity crate (Epic or better)?
+function Cosmetics.is_pity(opened: number): boolean
+	return (math.floor(opened) + 1) % Cosmetics.PITY_EVERY == 0
+end
+
+--- Crates until the next pity crate (1 = the next one).
+function Cosmetics.pity_in(opened: number): number
+	local n = math.floor(opened)
+	return Cosmetics.PITY_EVERY - (n % Cosmetics.PITY_EVERY)
+end
+
+--- The country flags (owned from earlier crates; no crate gives them now).
+function Cosmetics.flags(): { Item }
+	return flag_items
 end
 
 --- The items made for particular players (Cosmetics.exclusive_skins).
@@ -495,9 +544,8 @@ end
 --- don't count).
 function Cosmetics.crate_owned(owned: { [string]: any }): number
 	local n = 0
-	for id in owned do
-		local it = items[id]
-		if it ~= nil and not it.exclusive and not it.shop and not it.general and not it.pass then
+	for _, it in order do
+		if owned[it.id] then
 			n += 1
 		end
 	end
@@ -536,6 +584,9 @@ end
 --- uploaded sheets are private to RoWorld and draw blank in our experience): (name, x, y, w, h), or nil.
 --- `big`: a shop flag's large card art.
 function Cosmetics.flag_embedded(it: any, big: boolean?): (string?, number, number, number, number)
+	if it ~= nil and type(it.card) == "string" then
+		return it.card, 0, 0, 0, 0 -- (a Galactic item's card: the whole image)
+	end
 	if it == nil or it.kind ~= "flag" then
 		return nil, 0, 0, 0, 0
 	end
@@ -575,18 +626,32 @@ end
 --- The player's own odds per rarity: RARITIES' odds over the rarities that still have an item they
 --- don't own (owned: set of item ids). { {rarity, odds, left} } in RARITIES order; odds sum to 1 (0 each
 --- when everything is owned).
-function Cosmetics.odds(owned: { [string]: any }): { { rarity: any, odds: number, left: number } }
+--- `pity`: this crate is a PITY_EVERY-th one: only Epic or better (while any is left).
+function Cosmetics.odds(owned: { [string]: any }, pity: boolean?): { { rarity: any, odds: number, left: number } }
 	local out = {}
 	local total = 0.0
-	for _, r in Cosmetics.RARITIES do
+	local high_left = 0
+	if pity then
+		for i, r in Cosmetics.RARITIES do
+			if i >= Cosmetics.PITY_RANK then
+				for _, it in order do
+					if it.rarity == r.id and not owned[it.id] then
+						high_left += 1
+					end
+				end
+			end
+		end
+	end
+	for i, r in Cosmetics.RARITIES do
 		local left = 0
 		for _, it in order do
 			if it.rarity == r.id and not owned[it.id] then
 				left += 1
 			end
 		end
-		table.insert(out, { rarity = r, odds = if left > 0 then r.odds else 0.0, left = left })
-		if left > 0 then
+		local live = left > 0 and not (high_left > 0 and i < Cosmetics.PITY_RANK)
+		table.insert(out, { rarity = r, odds = if live then r.odds else 0.0, left = left })
+		if live then
 			total += r.odds
 		end
 	end
@@ -597,8 +662,8 @@ function Cosmetics.odds(owned: { [string]: any }): { { rarity: any, odds: number
 end
 
 --- Roll a crate: an item the player doesn't own (nil when they own everything). r1, r2 in [0, 1).
-function Cosmetics.roll(owned: { [string]: any }, r1: number, r2: number): string?
-	local odds = Cosmetics.odds(owned)
+function Cosmetics.roll(owned: { [string]: any }, r1: number, r2: number, pity: boolean?): string?
+	local odds = Cosmetics.odds(owned, pity)
 	local x = r1
 	local pick = nil
 	for _, e in odds do

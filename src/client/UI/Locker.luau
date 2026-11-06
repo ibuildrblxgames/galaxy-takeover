@@ -44,7 +44,22 @@ end)()
 
 local Locker = W.class(W.Control)
 
-Locker.TABS = { { "Skins", "skin" }, { "Flags", "flag" }, { "Fleets", "ship" } }
+Locker.TABS = {
+	{ "Skins", "skin" },
+	{ "Effects", "fx" }, -- (Galaxy Takeover, 2026-11-06: Data/Galactic)
+	{ "Titles", "plate" },
+	{ "Fleets", "ship" },
+	{ "Flags", "flag" },
+}
+--- The tab of an item's kind.
+function Locker.tab_of(kind: string?): number
+	for i, t in Locker.TABS do
+		if t[2] == kind then
+			return i
+		end
+	end
+	return 1
+end
 Locker.SKIN_CARD = Vector2.new(116, 128)
 Locker.FLAG_CARD = Vector2.new(104, 96)
 Locker.GRID_SIZE = Vector2.new(560, 430)
@@ -132,7 +147,11 @@ local function show_item(img: ImageLabel, it: any)
 	if it == nil then
 		return
 	end
-	if it.kind == "ship" then
+	if (it.kind == "fx" or it.kind == "plate") and type(it.card) == "string" then
+		-- an effect or a title: its card (assets/embedded/galactic, tools/assets/make_galactic_art.py)
+		img.ResampleMode = Enum.ResamplerMode.Default
+		EmbeddedImage.apply(img, it.card, "")
+	elseif it.kind == "ship" then
 		-- a Space Pass fleet skin: its rocketship, battlecruiser and missile (Data/PassCosmetics)
 		img.ResampleMode = Enum.ResamplerMode.Pixelated
 		EmbeddedImage.apply(img, it.preview, "")
@@ -338,7 +357,7 @@ function Locker._build_crate(self, parent: any)
 	self._crate_title = UITheme.label("COSMETIC CRATE", 16, 800, UITheme.TEXT, 2)
 	self._crate_title:set_alignment(W.ALIGN_CENTER)
 	v:add_child(self._crate_title)
-	self._crate_sub = UITheme.label("A territory skin or a flag you don't own yet", 12, 500, UITheme.TEXT_2)
+	self._crate_sub = UITheme.label("A skin, an effect or a title you don't own yet", 12, 500, UITheme.TEXT_2)
 	self._crate_sub:set_alignment(W.ALIGN_CENTER)
 	self._crate_sub:set_autowrap(true)
 	self._crate_sub:set_min_size(Vector2.new(Locker.CRATE_W - 32, 0))
@@ -458,7 +477,16 @@ function Locker._refresh_crate(self)
 	local total = #Cosmetics.all()
 	local owned = Cosmetics.crate_owned(inv.owned)
 	self._count:set_text(string.format("%d of %d unlocked", owned, total))
-	for _, e in Cosmetics.odds(inv.owned) do
+	-- (every PITY_EVERY-th crate is Epic or better: Data/Cosmetics.is_pity)
+	local opened = tonumber(inv.crates_opened) or 0
+	local pity = Cosmetics.is_pity(opened)
+	local n_pity = Cosmetics.pity_in(opened)
+	self._crate_sub:set_text(
+		if pity
+			then "This crate: EPIC OR BETTER guaranteed!"
+			else string.format("A skin, effect or title you don't own  ·  Epic+ in %d", n_pity)
+	)
+	for _, e in Cosmetics.odds(inv.owned, pity) do
 		local l = self._odds[e.rarity.id]
 		if l then
 			l:set_text(if e.left > 0 then string.format("%.0f%%", e.odds * 100) else "all owned")
@@ -504,7 +532,7 @@ function Locker._refresh_crate(self)
 	if not allowed then
 		self._note:set_text("Crates aren't available in your country. What you own stays yours.")
 	elseif all_owned then
-		self._note:set_text("You own every skin and flag.")
+		self._note:set_text("You own every crate item.")
 	elseif waiting <= 0 and prod == Products.crate_first then
 		self._note:set_text(
 			string.format("First crate only: %d instead of %d. Then %d each, less in packs", self:_price(), Prices.robux("crate"), Prices.robux("crate"))
@@ -678,7 +706,7 @@ function Locker._on_result(self, ok: boolean, res: string)
 		local it = Cosmetics.item(res)
 		if it ~= nil then
 			-- the grid behind shows the new item's tab
-			self._tab = if it.kind == "flag" then 2 else 1
+			self._tab = Locker.tab_of(it.kind)
 			for j, ch in ipairs(self._tabs) do
 				ch:set_pressed_no_signal(j == self._tab)
 			end
@@ -689,7 +717,7 @@ function Locker._on_result(self, ok: boolean, res: string)
 	elseif o ~= nil then
 		o:fail(
 			if res == "everything owned"
-				then "You own every skin and flag already."
+				then "You own every crate item already."
 				else "Couldn't open the crate right now. It's saved: try again."
 		)
 	end
@@ -841,8 +869,15 @@ function Locker._rebuild(self)
 			table.insert(list, it)
 		end
 	end
-	for _, it in Cosmetics.shop_items() do
+	-- (country flags: no crate gives them now, but earlier ones stay worn)
+	for _, it in Cosmetics.flags() do
 		if it.kind == slot and inv.owned[it.id] == true then
+			table.insert(list, it)
+		end
+	end
+	-- (a crate's Galactic items are in all() already; the shop-only ones show once bought)
+	for _, it in Cosmetics.shop_items() do
+		if it.kind == slot and not it.crate and inv.owned[it.id] == true then
 			table.insert(list, it)
 		end
 	end

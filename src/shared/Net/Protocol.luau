@@ -126,6 +126,8 @@ Protocol.OP = {
 	LEVEL = 47, -- server → client: ({ xp, lines = { {key, amount} }, level_before, level, crates, mode })
 	-- a finished match's level XP (the INVENTORY that follows carries `lvl`)
 	ANNOUNCE = 48, -- server → client: ({ text, from }) an admin's announcement (filtered), every server
+	GROUP_CLAIM = 49, -- client → server: I joined the group, give me its crate (reply SOCIAL)
+	SOCIAL = 50, -- server → client: ({ kind = "group" | "invite", result, name? }) a social reward
 }
 
 Protocol.INTENT_TYPES = {
