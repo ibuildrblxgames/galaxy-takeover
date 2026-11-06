@@ -49,6 +49,18 @@ MapSurface.__index = MapSurface
 -- Territory look
 MapSurface.TERRITORY_ALPHA = 150 -- 0.588
 MapSurface.SATURATION = 0.85
+--- Galaxy Takeover (2026-11-06, the owner: a faction's planets come out in different colours, so it is
+--- hard to see what a player holds). Planets are painted in their own colours (pink, orange, blue
+--- ...), and a fill blended over them at TERRITORY_ALPHA took on each planet's hue. With KEEP_HUE a
+--- fill keeps its owner's colour on every planet and the ground only shades it: the colour times
+--- SHADE_BASE + SHADE_K * (the ground's lightness - SHADE_MID), within SHADE_MIN .. SHADE_MAX, so the
+--- planet's texture still shows through.
+MapSurface.KEEP_HUE = true
+MapSurface.SHADE_BASE = 0.86
+MapSurface.SHADE_K = 0.4
+MapSurface.SHADE_MID = 0.55
+MapSurface.SHADE_MIN = 0.7
+MapSurface.SHADE_MAX = 1.0
 MapSurface.BORDER_DARKEN = 0.125
 MapSurface.HIGHLIGHT_BRIGHTEN = 0.25
 MapSurface.FRIENDLY_TINT = 0.35
@@ -949,6 +961,28 @@ function MapSurface.tile_pixel(self: MapSurface, i: number): number
 	return c
 end
 
+--- A fill `over` (alpha 1..254) on ground pixel `t`: alpha-blended, or with KEEP_HUE the fill's colour
+--- shaded by the ground's lightness (see KEEP_HUE).
+local function blend(t: number, over: number, a: number): number
+	local tr, tg, tb = t % 256, (t // 256) % 256, (t // 65536) % 256
+	local orr, og, ob = over % 256, (over // 256) % 256, (over // 65536) % 256
+	local r, gg, b
+	if MapSurface.KEEP_HUE then
+		local lum = (tr * 0.299 + tg * 0.587 + tb * 0.114) / 255
+		local k = math.clamp(
+			MapSurface.SHADE_BASE + MapSurface.SHADE_K * (lum - MapSurface.SHADE_MID),
+			MapSurface.SHADE_MIN,
+			MapSurface.SHADE_MAX
+		)
+		r, gg, b = orr * k, og * k, ob * k
+	else
+		local f = a / 255
+		local g = 1 - f
+		r, gg, b = tr * g + orr * f, tg * g + og * f, tb * g + ob * f
+	end
+	return math.floor(r + 0.5) + math.floor(gg + 0.5) * 256 + math.floor(b + 0.5) * 65536 + 4278190080
+end
+
 --- Composite tile i (terrain under its overlay) into the image buffer.
 local function composite(self: MapSurface, i: number)
 	local over = self:tile_pixel(i)
@@ -959,17 +993,7 @@ local function composite(self: MapSurface, i: number)
 	elseif a == 255 then
 		writeu32(self.comp, k, over)
 	else
-		local t = readu32(self.terrain, k)
-		local f = a / 255
-		local g = 1 - f
-		local r = (t % 256) * g + (over % 256) * f
-		local gg = ((t // 256) % 256) * g + ((over // 256) % 256) * f
-		local b = ((t // 65536) % 256) * g + ((over // 65536) % 256) * f
-		writeu32(
-			self.comp,
-			k,
-			math.floor(r + 0.5) + math.floor(gg + 0.5) * 256 + math.floor(b + 0.5) * 65536 + 4278190080
-		)
+		writeu32(self.comp, k, blend(readu32(self.terrain, k), over, a))
 	end
 end
 
@@ -1056,17 +1080,7 @@ local function paint_queue(self: MapSurface, head: number, last: number)
 				elseif a == 255 then
 					writeu32(comp, k, over)
 				else
-					local t = readu32(terrain, k)
-					local f = a / 255
-					local g = 1 - f
-					local r = (t % 256) * g + (over % 256) * f
-					local gg = ((t // 256) % 256) * g + ((over // 256) % 256) * f
-					local b = ((t // 65536) % 256) * g + ((over // 65536) % 256) * f
-					writeu32(
-						comp,
-						k,
-						math.floor(r + 0.5) + math.floor(gg + 0.5) * 256 + math.floor(b + 0.5) * 65536 + 4278190080
-					)
+					writeu32(comp, k, blend(readu32(terrain, k), over, a))
 				end
 			end
 		end

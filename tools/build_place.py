@@ -31,6 +31,7 @@ ENUMS = {
     "TonemapperPreset": {"Default": 0, "Retro": 1},
     "ScreenOrientation": {"LandscapeLeft": 0, "LandscapeRight": 1, "LandscapeSensor": 2,
                           "Portrait": 3, "Sensor": 4},
+    "ChatVersion": {"LegacyChatService": 0, "TextChatService": 1},
 }
 
 CLASS_BY_NAME = {"StarterPlayerScripts", "StarterCharacterScripts"}

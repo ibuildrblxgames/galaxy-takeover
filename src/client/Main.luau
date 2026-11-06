@@ -571,6 +571,16 @@ function Main.start()
 			warn("[GalacticWars] Space Pass failed: " .. tostring(sp))
 		end
 	end
+	-- the owner's chat tag and admin announcements (UI/Announce)
+	local Announce = optional(client, { "UI", "Announce" })
+	if Announce ~= nil then
+		local ok_an, an = pcall(Announce.new, session, Main.OWNER_USER_ID)
+		if ok_an then
+			Main.announce = an
+		else
+			warn("[GalaxyTakeover] Announce failed: " .. tostring(an))
+		end
+	end
 	-- levels and the lobby's leaderboard (Data/Levels; UI/StatsUI)
 	local StatsUI = optional(client, { "UI", "StatsUI" })
 	if StatsUI ~= nil then

@@ -260,6 +260,8 @@ function Session.new(env: { [string]: any }?)
 	self.leaderboard = Signal.new()
 	--- ({ xp, lines, level_before, level, crates, mode }) a finished match's level XP (Data/Levels)
 	self.level_gained = Signal.new()
+	--- ({ text, from }) an admin's announcement (server/ServerMain "/announce")
+	self.announcement = Signal.new()
 	--- (going: boolean) the answer to hop_solo: true = a teleport to a fresh server is on its way
 	self.hop_result = Signal.new()
 	--- (key) an Arsenal item was just unlocked (Stars or Robux)
@@ -1571,6 +1573,11 @@ function Session._on_net(self: any, op: number, ...: any)
 		local data = ...
 		if type(data) == "table" and type(data.boards) == "table" then
 			self:_emit("leaderboard", data)
+		end
+	elseif op == OP.ANNOUNCE then
+		local d = ...
+		if type(d) == "table" and type(d.text) == "string" then
+			self:_emit("announcement", { text = d.text, from = if type(d.from) == "string" then d.from else "" })
 		end
 	elseif op == OP.LEVEL then
 		local g = ...

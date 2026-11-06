@@ -1284,6 +1284,70 @@ function ServerMain.start()
 			end
 		end)
 	end
+	-- Announcements (2026-11-06, the owner: "how do i do announcements in the game"): a game admin
+	-- (the group's owner or a high rank) types "/announce <text>" in chat; the text, run through
+	-- Roblox's filter for everyone, goes to every server (MessagingService) and shows as a banner and a
+	-- system line in chat (UI/Announce). The command itself never shows in chat.
+	do
+		local TextChatService = game:GetService("TextChatService")
+		local TextService = game:GetService("TextService")
+		local Messaging = game:GetService("MessagingService")
+		local TOPIC = "GT_Announce"
+		local function deliver(data: any)
+			if type(data) ~= "table" or type(data.text) ~= "string" or data.text == "" then
+				return
+			end
+			for _, p in Players:GetPlayers() do
+				send(p, OP.ANNOUNCE, { text = data.text, from = tostring(data.from or "") })
+			end
+		end
+		task.spawn(function()
+			local ok, err = pcall(function()
+				Messaging:SubscribeAsync(TOPIC, function(m)
+					-- (the sending server showed it already)
+					if type(m.Data) == "table" and m.Data.job ~= game.JobId then
+						deliver(m.Data)
+					end
+				end)
+			end)
+			if not ok then
+				warn("[Announce] subscribe failed: " .. tostring(err))
+			end
+		end)
+		local cmd = Instance.new("TextChatCommand")
+		cmd.Name = "GTAnnounce"
+		cmd.PrimaryAlias = "/announce"
+		cmd.Parent = TextChatService
+		cmd.Triggered:Connect(function(source: TextSource, text: string)
+			local pl = Players:GetPlayerByUserId(source.UserId)
+			if pl == nil or not admins[pl] then
+				return
+			end
+			local msg = string.sub((string.gsub(text, "^%s*/announce%s*", "")), 1, 200)
+			if msg == "" then
+				return
+			end
+			local ok, filtered = pcall(function()
+				local r = TextService:FilterStringAsync(msg, pl.UserId, Enum.TextFilterContext.PublicChat)
+				return r:GetNonChatStringForBroadcastAsync()
+			end)
+			if not ok or type(filtered) ~= "string" or filtered == "" then
+				warn("[Announce] filter failed: " .. tostring(filtered))
+				return
+			end
+			local data = { text = filtered, from = pl.DisplayName, job = game.JobId }
+			print(string.format("[Announce] %s: %s", pl.Name, filtered))
+			deliver(data)
+			task.spawn(function()
+				local sent, err = pcall(function()
+					Messaging:PublishAsync(TOPIC, data)
+				end)
+				if not sent then
+					warn("[Announce] not sent to other servers: " .. tostring(err))
+				end
+			end)
+		end)
+	end
 	--- Bot players of the running match (owner ids) to each admin, whenever the match changes.
 	local function push_admin_bots()
 		local sim = server:sim()

@@ -125,6 +125,7 @@ Protocol.OP = {
 	LEADERBOARD_DATA = 46, -- server → client: ({ boards = { [board] = { {id, name, display, value} } } })
 	LEVEL = 47, -- server → client: ({ xp, lines = { {key, amount} }, level_before, level, crates, mode })
 	-- a finished match's level XP (the INVENTORY that follows carries `lvl`)
+	ANNOUNCE = 48, -- server → client: ({ text, from }) an admin's announcement (filtered), every server
 }
 
 Protocol.INTENT_TYPES = {
